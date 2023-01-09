@@ -44,7 +44,11 @@
     - title: Supported Operators and Functions
       url: sql-reference/operators-and-functions
 - title: REST API
-  url: rest/rest-api
+  items:
+    - title: About Rest API
+      url: rest/rest-api
+    - title: REST Reference
+      url: rest/swagger
 - title: Thin Clients
   url: thin-clients/index
 - title: Distributed Computing
