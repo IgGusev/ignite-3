@@ -88,8 +88,6 @@
       url: developers-guide/data-streamer
     - title: Code Deployment
       url: developers-guide/code-deployment/code-deployment
-    - title: Cache Storage
-      url: developers-guide/cache
     - title: REST API
       url: developers-guide/rest/rest-api
       items:
