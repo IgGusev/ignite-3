@@ -38,7 +38,7 @@
       url: quick-start/java-api
 - title: Embedded Mode
   url: quick-start/embedded-mode
-- title: GridGain CLI Tool
+- title: Ignite CLI Tool
   url: ignite-cli-tool
 - title: Developers Guide
   url: developers-guide/table-api
@@ -63,6 +63,8 @@
       items:
         - title: Introduction
           url: developers-guide/sql/calcite-based-sql-engine
+        - title: SQL API
+          items: developers-guide/sql/sql-api
         - title: JDBC Driver
           url: developers-guide/sql/jdbc-driver
         - title: System Views
@@ -96,7 +98,7 @@
 - title: Administrator’s Guide
   url: administrators-guide/config/config
   items:
-    - title: GridGain Configuration
+    - title: Ignite Configuration
       url: administrators-guide/config/config
       items:
         - title: Node Configuration Parameters
@@ -105,17 +107,6 @@
           url: administrators-guide/config/cluster-config
         - title: Storage Configuration
           url: administrators-guide/config/storage/persistent
-          items:
-            - title: Native Persistent Storage
-              url: administrators-guide/config/storage/persistent
-            - title: RocksDB Persistent Storage
-              url: administrators-guide/config/storage/rocksdb
-            - title: Volatile Storage
-              url: administrators-guide/config/storage/volatile
-            - title: Table Configuration
-              url: administrators-guide/config/storage/table-configuration
-        - title: Memory Quotas Configuration
-          url: administrators-guide/config/memory-quotas
     - title: Security and Authentication
       url: administrators-guide/security/ssl-tls
       items:

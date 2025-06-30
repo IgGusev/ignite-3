@@ -26,24 +26,33 @@ Here is how the client connector configuration looks like:
 
 [source, json]
 ----
-"clientConnector": {
-  "port": 10800,
-  "idleTimeout":3000,
-  "sendServerExceptionStackTraceToClient":true,
-  "ssl": {
-    enabled: true,
-    clientAuth: "require",
-    keyStore: {
-      path: "KEYSTORE_PATH",
-      password: "SSL_STORE_PASS"
-    },
-    trustStore: {
-      path: "TRUSTSTORE_PATH",
-      password: "SSL_STORE_PASS"
+{
+  "ignite" : {
+    "clientConnector" : {
+      "connectTimeout" : 5000,
+      "idleTimeout" : 0,
+      "listenAddresses" : "",
+      "metricsEnabled" : false,
+      "port" : 10800,
+      "sendServerExceptionStackTraceToClient" : false,
+      "ssl" : {
+        "ciphers" : "",
+        "clientAuth" : "none",
+        "enabled" : false,
+          "keyStore" : {
+            "password" : "********",
+            "path" : "",
+            "type" : "PKCS12"
+        },
+        "trustStore" : {
+          "password" : "********",
+          "path" : "",
+          "type" : "PKCS12"
+        }
+      }
     }
   }
 }
-
 ----
 
 //NOTE: Replace with link to javadoc once it is published.

@@ -12,358 +12,149 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-= Distributed Computing
+= Performing Transactions
 
-Ignite 3 provides an API for distributing computations across cluster nodes in a balanced and fault-tolerant manner. You can submit individual tasks for execution from Java and .NET clients.
+All queries in Ignite 3 are transactional. You can provide an explicit transaction as a first argument of any Table and SQL API call. If you do not provide an explicit transaction, an implicit one will be created for every call.
 
-You can use Java or .NET client to execute compute jobs. Make sure the required classes are deployed to the cluster before executing code.
+== Transaction Lifecycle
 
-The example below assumes that the `NodeNameJob` class has been deployed to the node by using link:developers-guide/code-deployment[code deployment].
+When the transaction is created, the node that the transaction was started from is chosen as *transaction coordinator*. The coordinator finds the required link:administrators-guide/data-partitions[partitions] and sends the read or write requests to the nodes holding primary partitions. For correct transaction operation, all nodes in cluster must have similar time, that can be different by no more than `schemaSync.maxClockSkewMillis`.
 
-//== Synchronous Computation
+If the key is not locked by a different transaction, the node gets the locks on the involved keys, and attempts to apply the changes in the transaction. When the operation finishes, the lock is removed. This way, several transactions can work on the same partition, while changing separate keys. Additionally, some operations may perform *short-term* locks on the keys in advance, to ensure operations proceed correctly.
 
-[tabs]
---
-tab:Java[]
-[source, java]
-----
-private void example() {
-    IgniteClient client = client();
-    IgniteCompute compute = client.compute();
-    Set<ClusterNode> nodes = new HashSet<>(client.clusterNodes());
+If the node with primary replica of the partition involved in the transaction fail, the transaction is eventually automatically rolled back. Ignite will return `TransactionException` on commit attempt.
 
-    //Unit `unitName:1.1.1` contains NodeNameJob class.
-    List<DeploymentUnit> units = List.of(new DeploymentUnit("unitName", Version.parseVersion("1.1.1"));
+== Transaction Isolation and Concurrency
 
-    JobExecution<String> execution = compute.executeAsync(nodes, units, NodeNameJob.class, "Hello");
-    var result = execution.resultAsync()
-}
-----
+All read-write transactions in Ignite acquire locks during the first read or write access, and hold the lock until the transaction is committed or rolled back. All read-write transactions are `SERIALIZABLE`, so as long as the lock persists, no other transaction can make changes to locked data, however data can still be read by <<Read-Only Transactions>>.
 
+=== Deadlock Prevention
 
-NOTE: Unlike in Ignite 2, jobs are not serialized. Only the class name and arguments are sent to the node.
+Ignite 3 uses the `WAIT_DIE` deadlock prevention algorithm. When a newer transaction requests data that is already locked by a different transaction, it is cancelled and the transaction operation is retried with the same timestamp. If the transaction is older, it is not cancelled and is allowed to wait for the lock to be freed.
 
-tab:.NET[]
-[source, csharp]
-----
-IIgniteClient client = Client;
-ICompute compute = client.Compute;
-IList<IClusterNode> nodes = await Client.GetClusterNodesAsync();
+== Executing Transactions
 
-// Unit `unitName:1.1.1` contains NodeNameJob class.
-var units = new List<DeploymentUnit> { new DeploymentUnit("unitName", "1.1.1") };
-
-IJobExecution<string> execution = await compute.SubmitAsync<string>(nodes, units, NodeNameJob, JobExecutionOptions.Default, "Hello");
-string result = await execution.GetResultAsync();
-----
-
-tab:C++[]
-[source, cpp]
-----
-using namespace ignite;
-
-compute comp = client.get_compute();
-std::vector<cluster_node> nodes = client.get_nodes();
-
-// Unit `unitName:1.1.1` contains NodeNameJob class.
-std::vector<deployment_unit> units{deployment_unit{"unitName", "1.1.1"}};
-
-job_execution execution = comp.submit(nodes, units, NODE_NAME_JOB, {std::string("Hello")}, {});
-std::string result = execution.get_result()->get<std::string>();
-----
---
-
-//== Asynchronous Computation
-// Placeholder for when API is complete
-
-== Job Ownership
-
-If the cluster has link:security/authentication[Authentication] enabled, compute jobs are executed by a specific user. If user permissions are configured on the cluster, the user needs the appropriate link:security/permissions#distributed-computing[distributed computing permissions] to work with distributed computing jobs. Only users with `JOBS_ADMIN` action can interact with jobs of other users.
-
-== Job Execution States
-
-You can keep track of the status of the job on the server and react to status changes. For example:
+Here is how you  can provide a transaction explicitly:
 
 [tabs]
 --
 tab:Java[]
 [source, java]
 ----
-private void example() {
-    IgniteClient client = client();
-    IgniteCompute compute = client.compute();
-    Set<ClusterNode> nodes = new HashSet<>(client.clusterNodes());
+KeyValueView<Long, Account> accounts =
+  table.keyValueView(Mapper.of(Long.class), Mapper.of(Account.class));
 
-    // Unit `unitName:1.1.1` contains NodeNameJob class.
-    List<DeploymentUnit> units = List.of(new DeploymentUnit("unitName", Version.parseVersion("1.1.1"));
+accounts.put(null, 42, new Account(16_000));
 
-    JobExecution<String> execution = compute.executeAsync(nodes, units, NodeNameJob.class, "Hello");
+var tx = client.transactions().begin();
 
-    execution.statusAsync().thenApply(status -> {
-       if (status == "Failed") {
-        // Handle failure
-       }
-    });
+Account account = accounts.get(tx, 42);
+account.balance += 500;
+accounts.put(tx, 42, account);
 
-    var result = execution.resultAsync()
-}
+assert accounts.get(tx, 42).balance == 16_500;
+
+tx.rollback();
+
+assert accounts.get(tx, 42).balance == 16_000;
 ----
 
 tab:.NET[]
 [source, csharp]
 ----
-IIgniteClient client = Client;
-ICompute compute = client.Compute;
-IList<IClusterNode> nodes = await Client.GetClusterNodesAsync();
+var accounts = table.GetKeyValueView<long, Account>();
+await accounts.PutAsync(transaction: null, 42, new Account(16_000));
 
-// Unit `unitName:1.1.1` contains NodeNameJob class.
-var units = new List<DeploymentUnit> { new DeploymentUnit("unitName", "1.1.1") };
+await using ITransaction tx = await client.Transactions.BeginAsync();
 
-IJobExecution<string> execution = await compute.SubmitAsync<string>(nodes, units, NodeNameJob, JobExecutionOptions.Default, "Hello");
+(Account account, bool hasValue) = await accounts.GetAsync(tx, 42);
+account = account with { Balance = account.Balance + 500 };
 
-JobStatus? status = await execution.GetStatusAsync();
+await accounts.PutAsync(tx, 42, account);
 
-if (status?.State == JobState.Failed)
-{
-    // Handle failure
-}
+Debug.Assert((await accounts.GetAsync(tx, 42)).Value.Balance == 16_500);
 
-string result = await execution.GetResultAsync();
+await tx.RollbackAsync();
+
+Debug.Assert((await accounts.GetAsync(null, 42)).Value.Balance == 16_000);
+
+public record Account(decimal Balance);
 ----
 
 tab:C++[]
 [source, cpp]
 ----
-using namespace ignite;
+auto accounts = table.get_key_value_view<account, account>();
 
-compute comp = client.get_compute();
-std::vector<cluster_node> nodes = client.get_nodes();
+account init_value(42, 16'000);
+accounts.put(nullptr, {42}, init_value);
 
-// Unit `unitName:1.1.1` contains NodeNameJob class.
-std::vector<deployment_unit> units{deployment_unit{"unitName", "1.1.1"}};
+auto tx = client.get_transactions().begin();
 
-job_execution execution = comp.submit(nodes, units, NODE_NAME_JOB, {std::string("Hello")}, {});
+std::optional<account> res_account = accounts.get(&tx, {42});
+res_account->balance += 500;
+accounts.put(&tx, {42}, res_account);
 
-std::optional<job_status> status = execution.get_status();
-if (status && status->state == job_state::FAILED)
-{
-    // Handle failure
-}
-std::string result = execution.get_result()->get<std::string>();
+assert(accounts.get(&tx, {42})->balance == 16'500);
+
+tx.rollback();
+
+assert(accounts.get(&tx, {42})->balance == 16'000);
 ----
+
 --
 
-The table below lists the possible job statuses:
+//== Transaction Timeouts
 
-[width="100%",cols="20%,60%,20%"]
-|=======================================================================
-|Status |Description |Transitions to
+//Normally, transactions will be executed regardless of how long it takes it to arrive. You can set the transaction timeout in the `TransactionOptions`, in milliseconds. For example:
 
-| `Submitted` | The job was created and sent to the cluster, but not yet processed. | `Queued`, `Canceled`
-| `Queued` | The job was added to the queue and waiting queue for execution. | `Executing`, `Canceled`
-| `Executing` | The job is being executed. | `Canceling`, `Completed`, `Queued`
-| `Completed` | The job was executed successfully and the execution result was returned. |
-| `Failed` | The job was unexpectedly terminated during execution. | `Queued`
-| `Canceling` | Job has received the cancel command, but is still running. | `Completed`, `Canceled`
-| `Canceled` | Job was successfully cancelled. |
+//[source, java]
+//----
+//var tx = client.transactions().begin(new TransactionOptions().timeoutMillis(1000));
+//int balance = accounts.get(tx, 42).balance;
+//tx.commit();
+//----
 
-|=======================================================================
+== Transaction Management
 
-If all job execution threads are busy, new jobs received by the node are put into job queue according to their <<Job Priority>>. Ignite sorts all incoming jobs first by priority, then by the time, executing jobs queued earlier first.
+You can also manage transactions by using the `runInTransaction` class. When using it, the following will be done automatically:
 
-=== Cancelling Executing Jobs
+- The transaction is started and substituted to the closure.
+- The transaction is committed if no exceptions were thrown during the closure.
+- The transaction will be retried in case of recoverable error. Closure must be purely functional - not causing side effects.
 
-When the node receives the command to cancel the job in the `Executing` status, it will immediately send an interrupt to the thread that is responsible for the job. In most cases, this will lead to the job being immediately canceled, however there are cases in which the job will continue. If this happens, the job will be in the `Canceling` state. Depending on specific code being executed, the job may complete successfully, be canceled once the uninterruptible operation is finished, or remain in unfinished state (for example, if code is stuck in a loop). You can use the `JobExecution.statusAsync()` method to keep track of what status the job is in, and react to status change.
-
-
-== Job Configuration
-
-=== Job Priority
-
-You can specify a job priority by setting the `JobExecutionOptions.priority` property. Jobs with a higher priority will be queued before jobs with lower priority (for exammple, a job with priority 4 will be executed before the job with priority 2).
+Here is the example of a transaction that transfers money from one account to another, and handles a possible overdraft:
 
 [tabs]
 --
 tab:Java[]
+[source,java]
+----
+igniteTransactions.runInTransaction(tx -> {
+    CompletableFuture<Tuple> fut1 = view.getAsync(tx, Tuple.create().set("accountId", 1));
+    CompletableFuture<Tuple> fut2 = view.getAsync(tx, Tuple.create().set("accountId", 2)); // Read second balance concurrently
+    if (fut1.join().doubleValue("balance") - amount < 0) {
+        tx.rollback();
+        return;
+    }
+
+    view.upsert(tx, Tuple.create().set("accountId", 1).set("balance", fut1.join().doubleValue("balance") - amount));
+    view.upsert(tx, Tuple.create().set("accountId", 2).set("balance", fut2.join().doubleValue("balance") + amount);
+});
+----
+--
+
+== Read-Only Transactions
+
+When starting a transaction, you can configure the transaction as a *read-only* transaction. In these transactions, no data modification can be performed, but they also do not secure locks and can be performed on non-primary link:administrators-guide/data-partitions[partitions], further improving their performance. Read-only transactions always check the data for the moment they were started, even if new data was written to the database.
+
+Here is how you can make a read-only transaction:
+
 [source, java]
 ----
-private void example() {
-    IgniteClient client = client();
-    IgniteCompute compute = client.compute();
-    Set<ClusterNode> nodes = new HashSet<>(client.clusterNodes());
-
-    //Unit `unitName:1.1.1` contains NodeNameJob class.
-    List<DeploymentUnit> units = List.of(new DeploymentUnit("unitName", Version.parseVersion("1.1.1"));
-
-    // Create job execution options
-    JobExecutionOptions options = JobExecutionOptions.builder().priority(1).build();
-
-    JobExecution<String> execution = compute.executeAsync(nodes, units, NodeNameJob.class, options, "Hello");
-    var result = execution.resultAsync()
-}
+var tx = client.transactions().begin(new TransactionOptions().readOnly(true));
+int balance = accounts.get(tx, 42).balance;
+tx.commit();
 ----
 
-tab:.NET[]
-[source, csharp]
-----
-IIgniteClient client = Client;
-ICompute compute = client.Compute;
-IList<IClusterNode> nodes = await Client.GetClusterNodesAsync();
-
-// Unit `unitName:1.1.1` contains NodeNameJob class.
-var units = new List<DeploymentUnit> { new DeploymentUnit("unitName", "1.1.1") };
-
-// Create job execution options
-var options = JobExecutionOptions.Default with { Priority = 1 };
-
-IJobExecution<string> execution = await compute.SubmitAsync<string>(nodes, units, NodeNameJob, options, "Hello");
-string result = await execution.GetResultAsync();
-----
-
-tab:C++[]
-[source, cpp]
-----
-using namespace ignite;
-
-compute comp = client.get_compute();
-std::vector<cluster_node> nodes = client.get_nodes();
-
-// Unit `unitName:1.1.1` contains NodeNameJob class.
-std::vector<deployment_unit> units{deployment_unit{"unitName", "1.1.1"}};
-
-job_execution_options options{1, 0};
-job_execution execution = comp.submit(nodes, units, NODE_NAME_JOB, {std::string("Hello")}, std::move(options));
-std::string result = execution.get_result()->get<std::string>();
-----
---
-
-=== Job Retries
-
-You can set the number the job will be retried on failure by setting the `JobExecutionOptions.maxRetries` property. If set, the failed job will be retried the specified number of times before movbing to `Failed` state.
-
-[tabs]
---
-tab:Java[]
-[source, java]
-----
-private void example() {
-    IgniteClient client = client();
-    IgniteCompute compute = client.compute();
-    Set<ClusterNode> nodes = new HashSet<>(client.clusterNodes());
-
-    //Unit `unitName:1.1.1` contains NodeNameJob class.
-    List<DeploymentUnit> units = List.of(new DeploymentUnit("unitName", Version.parseVersion("1.1.1"));
-
-    // Create job execution options
-    JobExecutionOptions options = JobExecutionOptions.builder().maxRetries(5).build();
-
-    JobExecution<String> execution = compute.executeAsync(nodes, units, NodeNameJob.class, options, "Hello");
-    var result = execution.resultAsync()
-}
-----
-
-tab:.NET[]
-[source, csharp]
-----
-IIgniteClient client = Client;
-ICompute compute = client.Compute;
-IList<IClusterNode> nodes = await Client.GetClusterNodesAsync();
-
-// Unit `unitName:1.1.1` contains NodeNameJob class.
-var units = new List<DeploymentUnit> { new DeploymentUnit("unitName", "1.1.1") };
-
-// Create job execution options
-var options = JobExecutionOptions.Default with { MaxRetries = 5 };
-
-IJobExecution<string> execution = await compute.SubmitAsync<string>(nodes, units, NodeNameJob, options, "Hello");
-string result = await execution.GetResultAsync();
-----
-
-tab:C++[]
-[source, cpp]
-----
-using namespace ignite;
-
-compute comp = client.get_compute();
-std::vector<cluster_node> nodes = client.get_nodes();
-
-// Unit `unitName:1.1.1` contains NodeNameJob class.
-std::vector<deployment_unit> units{deployment_unit{"unitName", "1.1.1"}};
-
-job_execution_options options{0, 5};
-job_execution execution = comp.submit(nodes, units, NODE_NAME_JOB, {std::string("Hello")}, std::move(options));
-std::string result = execution.get_result()->get<std::string>();
-----
---
-
-== Job Failover
-
-Ignite 3 implements mechanics to handle issues that happen during job execution. The following situations are handled:
-
-=== Worker Node Shutdown
-
-If the [.tooltip]#worker node# is shut down, the [.tooltip]#coordinator node# will redistribute all jobs assigned to worker to other viable nodes. If no nodes are found, the job will fail and an exception will be sent to the client.
-
-=== Coordinator Node Shutdown
-
-If the coordinator node shuts down, all jobs will be cancelled as soon as the node detects that the coordinator is shut down. Note that link:compute/compute#cancelling-executing-jobs[some jobs] may take a long time to cancel.
-
-=== Client Disconnect
-
-If the client disconnects, all jobs will be cancelled as soon as the coordinator node detects the disconnect. Note that link:compute/compute#cancelling-executing-jobs[some jobs] may take a long time to cancel.
-
-== Colocated Computations
-
-In Ignite 3 you can execute colocated computation with `executeColocated` method. When you do it, the compute task is guaranteed to be executed on the nodes that hold the specified key. This can significantly reduce execution time if your tasks require data.
-
-
-[tabs]
---
-tab:Java[]
-[source, java]
-----
-private void example() {
-    IgniteClient client = client();
-    IgniteCompute compute = client.compute();
-    String table = "Person";
-    String key = "John";
-
-
-    //Unit `unitName:1.1.1` contains NodeNameJob class.
-    List<DeploymentUnit> units = List.of(new DeploymentUnit("unitName", Version.parseVersion("1.1.1"));
-
-    JobExecution<String> execution = compute.executeColocatedAsync(table, key, units, NodeNameJob.class, "Hello");
-    String result = execution.resultAsync().join()
-}
-----
-
-tab:.NET[]
-[source, csharp]
-----
-IIgniteClient client = Client;
-ICompute compute = client.Compute;
-string table = "Person";
-string key = "John";
-
-// Unit `unitName:1.1.1` contains NodeNameJob class.
-var units = new List<DeploymentUnit> { new DeploymentUnit("unitName", "1.1.1") };
-
-IJobExecution<string> execution = await compute.SubmitColocatedAsync<string, string>(table, key, units, NodeNameJob, "Hello");
-string result = await execution.GetResultAsync();
-----
-tab:C++[]
-[source, cpp]
-----
-using namespace ignite;
-
-compute comp = client.get_compute();
-std::string table{"Person"};
-std::string key{"John"};
-
-// Unit `unitName:1.1.1` contains NodeNameJob class.
-std::vector<deployment_unit> units{deployment_unit{"unitName", "1.1.1"}};
-
-job_execution execution = comp.submit_colocated(table, key, units, NODE_NAME_JOB, {std::string("Hello")}, {});
-std::string result = execution.get_result()->get<std::string>();
-----
---
+NOTE: Read-only transactions read data at a specific time. If new data was written since, old data will still be stored in link:administrators-guide/data-partitions#version-storage[Version Storage] and will be available until low watermark. If low watermark is reached during the transaction, data will be kept available until it is over.

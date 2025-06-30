@@ -50,9 +50,9 @@ The example below inserts 3 lines into the table in a single transaction, ensuri
 ----
 START TRANSACTION READ WRITE;
 
-INSERT INTO Person (1, 'John', 'Smith');
-INSERT INTO Person (2, 'Jane', 'Smith');
-INSERT INTO Person (3, 'Adam', 'Mason');
+INSERT INTO Person (id, name, surname) VALUES (1, 'John', 'Smith');
+INSERT INTO Person (id, name, surname) VALUES (2, 'Jane', 'Smith');
+INSERT INTO Person (id, name, surname) VALUES (3, 'Adam', 'Mason');
 
 COMMIT;
 ----
