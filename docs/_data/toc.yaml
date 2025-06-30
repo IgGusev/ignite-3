@@ -67,8 +67,6 @@
           items: developers-guide/sql/sql-api
         - title: JDBC Driver
           url: developers-guide/sql/jdbc-driver
-        - title: System Views
-          url: developers-guide/sql/system-views
         - title: ODBC Driver
           url: developers-guide/sql/odbc/odbc-driver
           items:
@@ -142,6 +140,8 @@
           url: administrators-guide/metrics/configuring-metrics
         - title: Metrics List
           url: administrators-guide/metrics/metrics-list
+        - title: System Views
+          url: developers-guide/sql/system-views
     - title: Handling Exceptions
       url: administrators-guide/handling-exceptions
 - title: SQL Reference
