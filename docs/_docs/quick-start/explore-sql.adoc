@@ -107,7 +107,7 @@ Before we can use the cluster, we need to initialize it:
 cluster init --name=ignite3 --metastorage-group=node1,node2,node3
 ----
 
-NOTE: If the license is not available, make sure the license file was mounted correctly.
+Here is how the result may look like:
 
 [source, text]
 ----

@@ -68,7 +68,7 @@ docker network connect ignite-network {container-id}
 +
 [source,shell]
 ----
-docker run -p 10301:10300 -p 10801:10800 -p 3345:3344 -it --network=ignite-network ignite/ignite3:latest cli
+docker run -p 10301:10300 -p 10801:10800 -p 3345:3344 -it --network=ignite-network apacheignite/ignite:3.0.0 cli
 ----
 
 The CLI will be able to connect to the IP address of the node. If you are not sure what the address is, use the `container inspect` command to check it:
