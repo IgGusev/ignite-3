@@ -54,6 +54,8 @@ public class KeyValuePojoExample {
 
         @Column("l_name")
         String lastName;
+
+        String str;
     }
 
     static
