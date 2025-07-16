@@ -61,8 +61,6 @@ public class RecordViewPojoExample {
 
         @Column("l_name")
         String lastName;
-
-        String str;
     }
 
     public static void main(String[] args) throws ExecutionException, InterruptedException {
