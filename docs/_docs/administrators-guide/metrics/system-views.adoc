@@ -203,15 +203,15 @@ Describes available system view columns.
 |=======
 |Column	|Data Type| Description
 
-| SCHEMA | STRING | *Deprecated*. The schema used by the table.
+| SCHEMA | STRING | The schema used by the table.
 | TABLE_NAME | STRING | Table name.
 | TABLE_ID | INT32 | Unique table identifier.
 | COLUMN_NAME | STRING | Column name.
-| TYPE | STRING | *Deprecated*. Column data type.
-| NULLABLE | BOOLEAN | *Deprecated*. If the column can be `NULL`.
-| PREC | INT32 | *Deprecated*. Value precision. 0 if not applicable to data type.
-| SCALE | INT32 | *Deprecated*. Value scale. 0 if not applicable to data type.
-| LENGTH | INT32 | *Deprecated*. Value length, in bytes.
+| TYPE | STRING | Column data type.
+| NULLABLE | BOOLEAN | If the column can be `NULL`.
+| PREC | INT32 | Value precision. 0 if not applicable to data type.
+| SCALE | INT32 | Value scale. 0 if not applicable to data type.
+| LENGTH | INT32 | Value length, in bytes.
 | COLUMN_ORDINAL | INT32 | The ordinal number of the column.
 | SCHEMA_ID | INT32 | The id of the schema used by the sequence.
 | PK_COLUMN_ORDINAL | INT32 | Zero-based position of the column in the primary key. `NULL` if the column is not part of the primary key.
