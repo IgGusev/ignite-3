@@ -141,7 +141,7 @@
         - title: Metrics List
           url: administrators-guide/metrics/metrics-list
         - title: System Views
-          url: developers-guide/sql/system-views
+          url: administrators-guide/metrics/system-views
     - title: Handling Exceptions
       url: administrators-guide/handling-exceptions
 - title: SQL Reference
